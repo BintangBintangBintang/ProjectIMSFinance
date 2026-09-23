@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title></title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    
+
+    <section class="card">
+      <h2>Data Kredit</h2>
+
+      <form id="creditForm">
+        <label>
+          Nama Customer
+          <input id="customerName" required value="Pak Sugus" />
+        </label>
+
+        <label>
+          Nama Mobil
+          <input id="carName" required value="Toyota Avanza" />
+        </label>
+
+        <label>
+          Harga Mobil
+          <input id="carPrice" type="number" required value="240000000" />
+        </label>
+
+        <label>
+          DP (%)
+          <input id="dpPercent" type="number" min="0" max="99" required value="20" />
+        </label>
+
+        <label>
+          Tenor (bulan)
+          <input id="tenor" type="number" min="1" required value="18" />
+        </label>
+
+        <label>
+          Tanggal Mulai
+          <input id="startDate" type="date" required value="2024-01-25" />
+        </label>
+
+        <button type="submit">Hitung Angsuran</button>
+      </form>
+    </section>
+
+    <section id="result" class="card hidden"></section>
+
+    <section id="scheduleSection" class="card hidden">
+      <!-- Judul disesuaikan dengan gambar -->
+      <h2 style="text-transform: uppercase;">JADWAL_ANGSURAN</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <!-- Header disesuaikan dengan desain awal -->
+            <tr>
+              <th>KONTRAK_NO</th>
+              <th>ANGSURAN_KE</th>
+              <th style="text-align: right;">ANGSURAN_PER_BULAN</th>
+              <th>TANGGAL_JATUH_TEMPO</th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
