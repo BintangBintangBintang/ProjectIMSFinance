@@ -74,14 +74,8 @@ function addMonths(dateString, months) {
   return date.toISOString().slice(0, 10);
 }
 
-// ==========================================
-// 3. ENDPOINT / ROUTING (DIUBAH MENJADI ASYNC)
-// ==========================================
 
-// Endpoint Root agar tidak Cannot GET /
-app.get("/", (req, res) => {
-  res.send("Server API Simulasi Kendaraan (Cloud Version) Berjalan Normal!");
-});
+
 
 app.post("/api/contracts", async (req, res) => {
   try {
