@@ -5,9 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-// Hapus express.static('public') jika frontend dipisah (Next.js/React), 
-// tapi biarkan jika file HTML disatukan di folder yang sama.
-app.use(express.static("public")); 
+app.use(express.static(path.join(__dirname, "public")));
 
 // ==========================================
 // 1. KONFIGURASI JSONBIN
@@ -185,3 +183,5 @@ app.get("/api/reports/jatuh-tempo", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`IMS Finance berjalan di http://localhost:${PORT}`);
 });
+
+const path = require("path");
