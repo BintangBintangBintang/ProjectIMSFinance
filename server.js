@@ -1,40 +1,62 @@
-const express = require("express");
-const fs = require("fs");
-const path = require("path");
+require('dotenv').config();
 
+const express = require("express");
 const app = express();
-const PORT = 3000;
-const DB_FILE = path.join(__dirname, "db.json");
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+// Hapus express.static('public') jika frontend dipisah (Next.js/React), 
+// tapi biarkan jika file HTML disatukan di folder yang sama.
+app.use(express.static("public")); 
 
-function readDb() {
-  return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
+// ==========================================
+// 1. KONFIGURASI JSONBIN
+// ==========================================
+// Gunakan environment variables agar API Key tidak bocor
+const BIN_ID = process.env.JSONBIN_BIN_ID; 
+const API_KEY = process.env.JSONBIN_API_KEY; 
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+async function readDb() {
+  try {
+    const response = await fetch(JSONBIN_URL, {
+      method: 'GET',
+      headers: { 'X-Master-Key': API_KEY }
+    });
+    const data = await response.json();
+    return data.record; // JSONBin v3 membungkus data asli di dalam objek 'record'
+  } catch (error) {
+    console.error("Gagal membaca dari JSONBin:", error);
+    return { kontrak: [], jadwal: [] };
+  }
 }
 
-function writeDb(db) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+async function writeDb(db) {
+  try {
+    await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': API_KEY
+      },
+      body: JSON.stringify(db)
+    });
+    console.log("Data berhasil disinkronisasi ke Cloud!");
+  } catch (error) {
+    console.error("Gagal menyimpan ke JSONBin:", error);
+  }
 }
 
+// ==========================================
+// 2. FUNGSI LOGIKA (TIDAK BERUBAH)
+// ==========================================
 function getInterestRate(tenor) {
-  // Pastikan input berupa angka valid dan di atas 0 agar tidak error
   if (typeof tenor !== 'number' || tenor <= 0) {
     throw new Error("Jangka waktu tidak valid. Silakan input ulang.");
   }
-
-  // Jangka Waktu <= 12 bulan
-  if (tenor <= 12) {
-    return 0.12;
-  } 
-  // Jangka Waktu > 12 and <= 24 bulan
-  else if (tenor > 12 && tenor <= 24) {
-    return 0.14;
-  } 
-  // Jangka Waktu > 24 bulan (berapapun nilai di atas 24)
-  else if (tenor > 24) {
-    return 0.165; 
-  }
+  if (tenor <= 12) return 0.12;
+  if (tenor > 12 && tenor <= 24) return 0.14;
+  if (tenor > 24) return 0.165; 
 }
 
 function nextContractNumber(kontrak) {
@@ -43,28 +65,27 @@ function nextContractNumber(kontrak) {
 }
 
 function addMonths(dateString, months) {
-  const date = new Date(dateString); // Format YYYY-MM-DD otomatis di-parse sebagai UTC
+  const date = new Date(dateString); 
   const originalDay = date.getUTCDate();
-
   date.setUTCMonth(date.getUTCMonth() + months);
-
   if (date.getUTCDate() !== originalDay) {
     date.setUTCDate(0);
   }
-
   return date.toISOString().slice(0, 10);
 }
 
-app.post("/api/contracts", (req, res) => {
+// ==========================================
+// 3. ENDPOINT / ROUTING (DIUBAH MENJADI ASYNC)
+// ==========================================
+
+// Endpoint Root agar tidak Cannot GET /
+app.get("/", (req, res) => {
+  res.send("Server API Simulasi Kendaraan (Cloud Version) Berjalan Normal!");
+});
+
+app.post("/api/contracts", async (req, res) => {
   try {
-    const {
-      customerName,
-      carName,
-      carPrice,
-      dpPercent,
-      tenor,
-      startDate
-    } = req.body;
+    const { customerName, carName, carPrice, dpPercent, tenor, startDate } = req.body;
 
     const price = Number(carPrice);
     const dp = Number(dpPercent);
@@ -73,7 +94,6 @@ app.post("/api/contracts", (req, res) => {
     if (!customerName || !carName || !startDate) {
       return res.status(400).json({ message: "Data customer, mobil, dan tanggal mulai wajib diisi." });
     }
-
     if (price <= 0 || dp < 0 || dp >= 100 || months <= 0) {
       return res.status(400).json({ message: "Nilai harga, DP, atau tenor tidak valid." });
     }
@@ -82,15 +102,13 @@ app.post("/api/contracts", (req, res) => {
     const dpAmount = price * dp / 100;
     const principal = price - dpAmount;
 
-    // Bunga flat sesuai flowchart:
     const totalInterest = principal * rate * (months / 12);
     const totalPayment = principal + totalInterest;
     let installment = totalPayment / months;
-    
-    // Pembulatan ke atas ke kelipatan 1000
     installment = Math.ceil(installment / 1000) * 1000;
 
-    const db = readDb();
+    // AWAIT digunakan karena membaca dari internet
+    const db = await readDb(); 
     const contractNo = nextContractNumber(db.kontrak);
 
     const contract = {
@@ -114,14 +132,15 @@ app.post("/api/contracts", (req, res) => {
       contractNo,
       installmentNo: index + 1,
       installmentAmount: installment,
-      // Ubah dari index + 1 menjadi index agar angsuran 1 = tanggal mulai
       dueDate: addMonths(startDate, index), 
       status: "BELUM BAYAR"
     }));
 
     db.kontrak.push(contract);
     db.jadwal.push(...installments);
-    writeDb(db);
+    
+    // AWAIT digunakan untuk menyimpan ke internet
+    await writeDb(db);
 
     res.json({ contract, installments });
   } catch (error) {
@@ -129,41 +148,36 @@ app.post("/api/contracts", (req, res) => {
   }
 });
 
-app.get("/api/contracts", (req, res) => {
-  const db = readDb();
+app.get("/api/contracts", async (req, res) => {
+  const db = await readDb();
   res.json(db.kontrak);
 });
 
-app.get("/api/contracts/:contractNo/installments", (req, res) => {
-  const db = readDb();
-  const data = db.jadwal.filter(
-    item => item.contractNo === req.params.contractNo
-  );
+app.get("/api/contracts/:contractNo/installments", async (req, res) => {
+  const db = await readDb();
+  const data = db.jadwal.filter(item => item.contractNo === req.params.contractNo);
   res.json(data);
 });
 
-app.get("/api/reports/jatuh-tempo", (req, res) => {
-  const db = readDb();
+app.get("/api/reports/jatuh-tempo", async (req, res) => {
+  const db = await readDb();
   const limitDate = "2024-08-14";
-  const targetClient = "sugus"; // Variabel ini sebelumnya belum didefinisikan
+  const targetClient = "sugus"; 
 
   const targetContracts = db.kontrak.filter(c => 
     c.customerName.toLowerCase().includes(targetClient)
   );
 
   const result = targetContracts.map(contract => {
-    // Cari jadwal angsuran yang sesuai kontrak dan <= batas tanggal
     const dueInstallments = db.jadwal.filter(i => 
       i.contractNo === contract.contractNo && 
       i.dueDate <= limitDate
     );
 
-    // Hitung total angsuran (SUM)
     const totalJatuhTempo = dueInstallments.reduce((total, i) => {
       return total + i.installmentAmount;
     }, 0);
 
-    // Kembalikan objek sesuai format tabel yang diminta
     return {
       "KONTRAK NO": contract.contractNo,
       "CLIENT NAME": contract.customerName,
