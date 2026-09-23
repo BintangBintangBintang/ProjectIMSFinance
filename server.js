@@ -17,11 +17,9 @@ function writeDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
-
 function getInterestRate(tenor) {
   // Pastikan input berupa angka valid dan di atas 0 agar tidak error
   if (typeof tenor !== 'number' || tenor <= 0) {
-    // Mewakili alur "No" yang kembali ke atas (meminta input ulang)
     throw new Error("Jangka waktu tidak valid. Silakan input ulang.");
   }
 
@@ -39,8 +37,8 @@ function getInterestRate(tenor) {
   }
 }
 
-function nextContractNumber(contracts) {
-  const number = contracts.length + 1;
+function nextContractNumber(kontrak) {
+  const number = kontrak.length + 1;
   return `AGR${String(number).padStart(5, "0")}`;
 }
 
@@ -85,17 +83,15 @@ app.post("/api/contracts", (req, res) => {
     const principal = price - dpAmount;
 
     // Bunga flat sesuai flowchart:
-    // bunga = pokok x bunga_tahunan x (tenor / 12)
     const totalInterest = principal * rate * (months / 12);
     const totalPayment = principal + totalInterest;
     let installment = totalPayment / months;
+    
     // Pembulatan ke atas ke kelipatan 1000
     installment = Math.ceil(installment / 1000) * 1000;
 
-    
-
     const db = readDb();
-    const contractNo = nextContractNumber(db.contracts);
+    const contractNo = nextContractNumber(db.kontrak);
 
     const contract = {
       contractNo,
@@ -113,8 +109,6 @@ app.post("/api/contracts", (req, res) => {
       startDate,
       createdAt: new Date().toISOString()
     };
-
-    // (Di dalam app.post("/api/contracts", ... ))
     
     const installments = Array.from({ length: months }, (_, index) => ({
       contractNo,
@@ -125,8 +119,8 @@ app.post("/api/contracts", (req, res) => {
       status: "BELUM BAYAR"
     }));
 
-    db.contracts.push(contract);
-    db.installments.push(...installments);
+    db.kontrak.push(contract);
+    db.jadwal.push(...installments);
     writeDb(db);
 
     res.json({ contract, installments });
@@ -137,37 +131,29 @@ app.post("/api/contracts", (req, res) => {
 
 app.get("/api/contracts", (req, res) => {
   const db = readDb();
-  res.json(db.contracts);
+  res.json(db.kontrak);
 });
 
 app.get("/api/contracts/:contractNo/installments", (req, res) => {
   const db = readDb();
-  const data = db.installments.filter(
+  const data = db.jadwal.filter(
     item => item.contractNo === req.params.contractNo
   );
   res.json(data);
 });
 
-app.listen(PORT, () => {
-  console.log(`IMS Finance berjalan di http://localhost:${PORT}`);
-});
-
 app.get("/api/reports/jatuh-tempo", (req, res) => {
   const db = readDb();
-  
-  
   const limitDate = "2024-08-14";
+  const targetClient = "sugus"; // Variabel ini sebelumnya belum didefinisikan
 
-
-  const targetContracts = db.contracts.filter(c => 
+  const targetContracts = db.kontrak.filter(c => 
     c.customerName.toLowerCase().includes(targetClient)
   );
 
-  
   const result = targetContracts.map(contract => {
-    
     // Cari jadwal angsuran yang sesuai kontrak dan <= batas tanggal
-    const dueInstallments = db.installments.filter(i => 
+    const dueInstallments = db.jadwal.filter(i => 
       i.contractNo === contract.contractNo && 
       i.dueDate <= limitDate
     );
@@ -186,4 +172,8 @@ app.get("/api/reports/jatuh-tempo", (req, res) => {
   });
 
   res.json(result);
+});
+
+app.listen(PORT, () => {
+  console.log(`IMS Finance berjalan di http://localhost:${PORT}`);
 });
